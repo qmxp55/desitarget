@@ -880,10 +880,10 @@ def _check_BGS_targtype_sv(targtype):
         raise ValueError(msg)
 
 
-def isBGS(gflux=None, rflux=None, zflux=None, w1flux=None, w2flux=None,
+def isBGS(rfiberflux=None, gflux=None, rflux=None, zflux=None, w1flux=None, w2flux=None,
           gnobs=None, rnobs=None, znobs=None, gfracmasked=None, rfracmasked=None, zfracmasked=None,
           gfracflux=None, rfracflux=None, zfracflux=None, gfracin=None, rfracin=None, zfracin=None,
-          gfluxivar=None, rfluxivar=None, zfluxivar=None, brightstarinblob=None, Grr=None,
+          gfluxivar=None, rfluxivar=None, zfluxivar=None, maskbits=None, Grr=None,
           w1snr=None, gaiagmag=None, objtype=None, primary=None, south=True, targtype=None):
     """Definition of BGS target classes. Returns a boolean array.
 
@@ -916,9 +916,9 @@ def isBGS(gflux=None, rflux=None, zflux=None, w1flux=None, w2flux=None,
                          gfracflux=gfracflux, rfracflux=rfracflux, zfracflux=zfracflux,
                          gfracin=gfracin, rfracin=rfracin, zfracin=zfracin, w1snr=w1snr,
                          gfluxivar=gfluxivar, rfluxivar=rfluxivar, zfluxivar=zfluxivar, Grr=Grr,
-                         gaiagmag=gaiagmag, brightstarinblob=brightstarinblob, targtype=targtype)
+                         gaiagmag=gaiagmag, maskbits=maskbits, targtype=targtype)
 
-    bgs &= isBGS_colors(gflux=gflux, rflux=rflux, zflux=zflux, w1flux=w1flux, w2flux=w2flux,
+    bgs &= isBGS_colors(rfiberflux=rfiberflux, gflux=gflux, rflux=rflux, zflux=zflux, w1flux=w1flux, w2flux=w2flux,
                         south=south, targtype=targtype, primary=primary)
 
     return bgs
@@ -929,7 +929,7 @@ def notinBGS_mask(gnobs=None, rnobs=None, znobs=None, primary=None,
                   gfracflux=None, rfracflux=None, zfracflux=None,
                   gfracin=None, rfracin=None, zfracin=None, w1snr=None,
                   gfluxivar=None, rfluxivar=None, zfluxivar=None, Grr=None,
-                  gaiagmag=None, brightstarinblob=None, targtype=None):
+                  gaiagmag=None, maskbits=None, targtype=None):
     """Standard set of masking cuts used by all BGS target selection classes
     (see, e.g., :func:`~desitarget.cuts.isBGS` for parameters).
     """
@@ -945,8 +945,6 @@ def notinBGS_mask(gnobs=None, rnobs=None, znobs=None, primary=None,
     bgs &= (gfracin > 0.3) & (rfracin > 0.3) & (zfracin > 0.3)
     bgs &= (gfluxivar > 0) & (rfluxivar > 0) & (zfluxivar > 0)
 
-    bgs &= ~brightstarinblob
-
     if targtype == 'bright':
         bgs &= ((Grr > 0.6) | (gaiagmag == 0))
     elif targtype == 'faint':
@@ -955,11 +953,19 @@ def notinBGS_mask(gnobs=None, rnobs=None, znobs=None, primary=None,
         bgs &= Grr < 0.4
         bgs &= Grr > -1
         bgs &= w1snr > 5
+        
+    #geometrical cuts (i.e., bright sources)
+    for bit in [1, 12, 13]:
+        bgs &= ((maskbits & 2**bit) == 0)
+        
+    #Allmask?
+    #for bit in [5, 6, 7]:
+    #    bgs &= ((maskbits & 2**bit) == 0)
 
     return bgs
 
 
-def isBGS_colors(gflux=None, rflux=None, zflux=None, w1flux=None, w2flux=None,
+def isBGS_colors(rfiberflux=None, gflux=None, rflux=None, zflux=None, w1flux=None, w2flux=None,
                  south=True, targtype=None, primary=None):
     """Standard set of color-based cuts used by all BGS target selection classes
     (see, e.g., :func:`~desitarget.cuts.isBGS` for parameters).
@@ -969,6 +975,7 @@ def isBGS_colors(gflux=None, rflux=None, zflux=None, w1flux=None, w2flux=None,
     if primary is None:
         primary = np.ones_like(rflux, dtype='?')
     bgs = primary.copy()
+    fmc = np.zeros_like(rflux, dtype='?')
 
     if targtype == 'bright':
         bgs &= rflux > 10**((22.5-19.5)/2.5)
@@ -989,6 +996,18 @@ def isBGS_colors(gflux=None, rflux=None, zflux=None, w1flux=None, w2flux=None,
         bgs &= rflux < gflux * 10**(4.0/2.5)
         bgs &= zflux > rflux * 10**(-1.0/2.5)
         bgs &= zflux < rflux * 10**(4.0/2.5)
+    
+    g = 22.5 - 2.5*np.log10(gflux.clip(1e-16))
+    r = 22.5 - 2.5*np.log10(rflux.clip(1e-16))
+    z = 22.5 - 2.5*np.log10(zflux.clip(1e-16))
+    rfib = 22.5 - 2.5*np.log10(rfiberflux.clip(1e-16))
+    
+    #Fibre Magnitude Cut (FMC) -- This is a low surface brightness cut with the aim of increase the redshift success rate.
+    fmc |= ((rfib < (2.9 + 1.2) + r) & (r < 17.1))
+    fmc |= ((rfib < 21.2) & (r < 18.3) & (r > 17.1))
+    fmc |= ((rfib < 2.9 + r) & (r > 18.3))
+    
+    bgs &= fmc
 
     return bgs
 
