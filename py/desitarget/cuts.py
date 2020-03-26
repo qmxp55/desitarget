@@ -1034,7 +1034,7 @@ def notinBGS_mask(gnobs=None, rnobs=None, znobs=None, primary=None,
     bgs &= (gfracmasked < 0.4) & (rfracmasked < 0.4) & (zfracmasked < 0.4)
     bgs &= (gfracflux < 5.0) & (rfracflux < 5.0) & (zfracflux < 5.0)
     bgs &= (gfracin > 0.3) & (rfracin > 0.3) & (zfracin > 0.3)
-    bgs &= (gfluxivar > 0) & (rfluxivar > 0) & (zfluxivar > 0)
+    #bgs &= (gfluxivar > 0) & (rfluxivar > 0) & (zfluxivar > 0)
 
     # geometrical cuts (i.e., bright sources)
     for bit in [1, 12, 13]:
